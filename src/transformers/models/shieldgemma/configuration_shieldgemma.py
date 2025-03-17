@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class ShieldGemma2Config(PretrainedConfig):
+class ShieldGemmaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ShieldGemma2ForImageClassification`]. It is used to instantiate an
     ShieldGemma2ForImageClassification according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -112,4 +112,4 @@ class ShieldGemma2Config(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["ShieldGemma2Config"]
+__all__ = ["ShieldGemmaConfig"]

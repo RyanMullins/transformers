@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import torch
 import torch.utils.checkpoint
 
-from ...modeling_outputs import ImageClassifierOutputWithNoAttention
+from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings_to_model_forward,
@@ -26,16 +26,19 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ..auto import AutoModelForImageTextToText
-from .configuration_shieldgemma2 import ShieldGemma2Config
+from ..auto import AutoModelForCausalLM, AutoModelForImageTextToText
+from .configuration_shieldgemma import ShieldGemmaConfig
 
 
 _CHECKPOINT_FOR_DOC = "google/shieldgemma-2-4b-it"
-_CONFIG_FOR_DOC = "ShieldGemma2Config"
+_CONFIG_FOR_DOC = "ShieldGemmaConfig"
+
+_DEFAULT_YES_TOKEN_INDEX = 10_784
+_DEFAULT_NO_TOKEN_INDEX = 3771
 
 logger = logging.get_logger(__name__)
 
-SHIELDGEMMA2_INPUTS_DOCSTRING = r"""
+SHIELDGEMMA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -111,22 +114,82 @@ SHIELDGEMMA2_INPUTS_DOCSTRING = r"""
 
 
 @dataclass
-class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWithNoAttention):
+class ShieldGemmaClassifierOutput(ModelOutput):
     """ShieldGemma2 classifies imags as violative or not relative to a specific policy
     Args:
     """
+    logits: torch.Tensor
+    probabilities: torch.Tensor
 
-    probabilities: torch.Tensor = None
+
+class ShieldGemmaLogitsProcessor():
+    """Filters the provided logits to the `Yes` and `No` tokens in the vocabulary and computes their probability."""
+
+    def __init__(self, config: ShieldGemmaConfig):
+        self.yes_token_index = getattr(config, "yes_token_index", _DEFAULT_YES_TOKEN_INDEX)
+        self.no_token_index = getattr(config, "no_token_index", _DEFAULT_NO_TOKEN_INDEX)
+
+    def __call__(self, logits: torch.Tensor) -> ShieldGemmaClassifierOutput:
+        selected_logits = logits[:, -1, [self.yes_token_index, self.no_token_index]]
+        probabilities = torch.softmax(selected_logits, dim=-1)
+        return ShieldGemmaClassifierOutput(
+            logits=selected_logits,
+            probabilities=probabilities,
+        )
+
+
+class ShieldGemmaForSequenceClassification(PreTrainedModel):
+    config_class = ShieldGemmaConfig
+
+    def __init__(self, config: ShieldGemmaConfig):
+        super().__init__(config)
+        self.model = AutoModelForCausalLM.from_config(config=config.text_config)
+        self.logits_processor = ShieldGemmaLogitsProcessor(config=config)
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.model.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.model.set_output_embeddings(new_embeddings)
+
+    def set_decoder(self, decoder):
+        self.model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.model.get_decoder()
+
+    def tie_weights(self):
+        return self.model.tie_weights()
+
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
+    @add_start_docstrings_to_model_forward(SHIELDGEMMA_INPUTS_DOCSTRING)
+    @replace_return_docstrings(
+        output_type=ShieldGemmaClassifierOutput, config_class=_CONFIG_FOR_DOC
+    )
+    def forward(self, **kwargs) -> ShieldGemmaClassifierOutput:
+        """Predicts the binary probability that the text violates the speicfied policy.
+
+        Args:
+
+        Returns:
+        """
+        outputs = self.model(**kwargs)
+        return self.logits_processor(outputs.logits)
 
 
 class ShieldGemma2ForImageClassification(PreTrainedModel):
-    config_class = ShieldGemma2Config
+    config_class = ShieldGemmaConfig
 
-    def __init__(self, config: ShieldGemma2Config):
+    def __init__(self, config: ShieldGemmaConfig):
         super().__init__(config=config)
-        self.yes_token_index = getattr(config, "yes_token_index", 10_784)
-        self.no_token_index = getattr(config, "no_token_index", 3771)
         self.model = AutoModelForImageTextToText.from_config(config=config)
+        self.logits_processor = ShieldGemmaLogitsProcessor(config=config)
 
     def get_input_embeddings(self):
         return self.model.language_model.get_input_embeddings()
@@ -150,11 +213,11 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
         return self.model.language_model.tie_weights()
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(SHIELDGEMMA2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(SHIELDGEMMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(
-        output_type=ShieldGemma2ImageClassifierOutputWithNoAttention, config_class=_CONFIG_FOR_DOC
+        output_type=ShieldGemmaClassifierOutput, config_class=_CONFIG_FOR_DOC
     )
-    def forward(self, **kwargs) -> ShieldGemma2ImageClassifierOutputWithNoAttention:
+    def forward(self, **kwargs) -> ShieldGemmaClassifierOutput:
         """Predicts the binary probability that the image violates the speicfied policy.
 
         Args:
@@ -162,15 +225,10 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
         Returns:
         """
         outputs = self.model(**kwargs)
-        logits = outputs.logits
-        selected_logits = logits[:, -1, [self.yes_token_index, self.no_token_index]]
-        probabilities = torch.softmax(selected_logits, dim=-1)
-        return ShieldGemma2ImageClassifierOutputWithNoAttention(
-            logits=selected_logits,
-            probabilities=probabilities,
-        )
+        return self.logits_processor(outputs.logits)
 
 
 __all__ = [
+    "ShieldGemmaForSequenceClassification",
     "ShieldGemma2ForImageClassification",
 ]

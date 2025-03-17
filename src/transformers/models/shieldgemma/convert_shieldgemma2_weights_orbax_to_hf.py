@@ -23,7 +23,7 @@ from ...image_utils import PILImageResampling
 from ..gemma import GemmaTokenizerFast
 from ..gemma3 import Gemma3ImageProcessor, Gemma3TextConfig
 from ..siglip import SiglipVisionConfig
-from . import ShieldGemma2Config, ShieldGemma2ForImageClassification, ShieldGemma2Processor
+from . import ShieldGemmaConfig, ShieldGemma2ForImageClassification, ShieldGemma2Processor
 
 
 # ==== Internal Constants and Classes ====
@@ -316,13 +316,13 @@ def transpose_reshape(x: torch.Tensor) -> torch.Tensor:
 @dataclasses.dataclass(frozen=True)
 class ConversionResult:
     state_tree: dict[str, torch.Tensor]
-    config: ShieldGemma2Config
+    config: ShieldGemmaConfig
 
 
 def convert(
     shieldgemma_checkpoint_path: str,
     gemma_checkpoint_path: str,
-    config: ShieldGemma2Config,
+    config: ShieldGemmaConfig,
     target_dtype: torch.dtype,
 ) -> ConversionResult:
     """Loads Orbax checkpoint from `input_path` and converts it to HF tree."""
@@ -374,7 +374,7 @@ def main(*args):
 
     yes_token_index, no_token_index = torch.tensor(tokenizer(["Yes", "No"])["input_ids"])[:, 1].numpy()
 
-    config = ShieldGemma2Config(
+    config = ShieldGemmaConfig(
         yes_token_index=int(yes_token_index),
         no_token_index=int(no_token_index),
         text_config=Gemma3TextConfig(
