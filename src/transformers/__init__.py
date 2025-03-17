@@ -773,8 +773,8 @@ _import_structure = {
     "models.seggpt": ["SegGptConfig"],
     "models.sew": ["SEWConfig"],
     "models.sew_d": ["SEWDConfig"],
-    "models.shieldgemma2": [
-        "ShieldGemma2Config",
+    "models.shieldgemma": [
+        "ShieldGemmaConfig",
         "ShieldGemma2Processor",
     ],
     "models.siglip": [
@@ -3578,7 +3578,12 @@ else:
             "SEWDPreTrainedModel",
         ]
     )
-    _import_structure["models.shieldgemma2"].append("ShieldGemma2ForImageClassification")
+    _import_structure["models.shieldgemma"].extend(
+        [
+            "ShieldGemmaForTextClassification",
+            "ShieldGemma2ForImageClassification",
+        ]
+    )
     _import_structure["models.siglip"].extend(
         [
             "SiglipForImageClassification",
@@ -5980,8 +5985,8 @@ if TYPE_CHECKING:
     from .models.seggpt import SegGptConfig
     from .models.sew import SEWConfig
     from .models.sew_d import SEWDConfig
-    from .models.shieldgemma2 import (
-        ShieldGemma2Config,
+    from .models.shieldgemma import (
+        ShieldGemmaConfig,
         ShieldGemma2Processor,
     )
     from .models.siglip import (
@@ -8348,7 +8353,8 @@ if TYPE_CHECKING:
             SEWDModel,
             SEWDPreTrainedModel,
         )
-        from .models.shieldgemma2 import (
+        from .models.shieldgemma import (
+            ShieldGemmaForSequenceClassification,
             ShieldGemma2ForImageClassification,
         )
         from .models.siglip import (

@@ -487,7 +487,7 @@ else:
                 ),
             ),
             (
-                "shieldgemma2",
+                "shieldgemma",
                 (
                     "GemmaTokenizer" if is_sentencepiece_available() else None,
                     "GemmaTokenizerFast" if is_tokenizers_available() else None,
