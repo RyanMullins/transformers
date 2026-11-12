@@ -5227,6 +5227,9 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         elif device.type == "neuron":
             # Skip warmup on Neuron (AWS Trainium/Inferentia): it provides no benefit as there is no reusable memory pool
             continue
+        elif device.type == "tpu":
+            # Skip warmup on TPU: PJRT manages HBM buffers directly without a reusable PyTorch caching allocator pool
+            continue
         # We divide by 2 here as we allocate in fp16
         _ = torch.empty(int(byte_count // 2), dtype=torch.float16, device=device, requires_grad=False)
 

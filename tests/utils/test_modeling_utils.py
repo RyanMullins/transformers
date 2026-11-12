@@ -2741,6 +2741,37 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertIn("Skipping caching allocator warmup", cl.out)
 
+    def test_accelerator_warmup_skipped_on_tpu(self):
+        """
+        PJRT manages XLA/TPU HBM buffers directly rather than using a reusable PyTorch caching allocator pool, so
+        `caching_allocator_warmup` must skip `tpu` devices without pre-allocating a warmup tensor.
+        """
+        from collections import namedtuple
+
+        from transformers.modeling_utils import caching_allocator_warmup
+
+        FakeDevice = namedtuple("FakeDevice", ["type", "index"])
+        fake_tpu = FakeDevice("tpu", 0)
+        real_torch_device = torch.device
+
+        def fake_torch_device(device):
+            if device in ("tpu", "tpu:0", fake_tpu):
+                return fake_tpu
+            return real_torch_device(device)
+
+        model = LlamaForCausalLM(
+            LlamaConfig(hidden_size=32, num_hidden_layers=2, num_attention_heads=4, intermediate_size=37)
+        )
+        expanded_device_map = {name: "tpu:0" for name, _ in model.named_parameters()}
+
+        with (
+            patch("transformers.modeling_utils.torch.device", side_effect=fake_torch_device),
+            patch("torch.empty", wraps=torch.empty) as mock_empty,
+        ):
+            caching_allocator_warmup(model, expanded_device_map, None)
+
+        mock_empty.assert_not_called()
+
     def test_mismatched_keys_with_quantizer(self):
         from transformers import FineGrainedFP8Config
 
